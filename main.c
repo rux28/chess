@@ -21,7 +21,9 @@ char board[BOARD_SIZE][BOARD_SIZE] = {
     {'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'},
     {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}
 };
-
+void test() {
+    printf("Testing board\n");
+}
 int isWhite(char piece) {
     return piece != ' ' && isupper(piece);
 }
