@@ -1,10 +1,8 @@
 "D:\CLion 2024.2.2\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=D:/CLion 2024.2.2/bin/ninja/win/x64/ninja.exe" -G Ninja -S "D:\CLion Projects\chess" -B "D:\CLion Projects\chess\cmake-build-debug"
--- The C compiler identification is GNU 13.1.0
--- Detecting C compiler ABI info
--- Detecting C compiler ABI info - done
--- Check for working C compiler: D:/CLion 2024.2.2/bin/mingw/bin/gcc.exe - skipped
--- Detecting C compile features
--- Detecting C compile features - done
--- Configuring done (4.0s)
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Found SDL2: mingw32;-mwindows;D:/SDL2-2.28.2/x86_64-w64-mingw32/lib/libSDL2main.a;D:/SDL2-2.28.2/x86_64-w64-mingw32/lib/libSDL2.dll.a
+-- Configuring done (1.1s)
 -- Generating done (0.0s)
 -- Build files have been written to: D:/CLion Projects/chess/cmake-build-debug

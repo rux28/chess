@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <SDL.h>
 
 #define BOARD_SIZE 8
 
@@ -21,9 +22,7 @@ char board[BOARD_SIZE][BOARD_SIZE] = {
     {'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'},
     {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}
 };
-void test() {
-    printf("Testing board\n");
-}
+
 int isWhite(char piece) {
     return piece != ' ' && isupper(piece);
 }
