@@ -1,17 +1,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <ctype.h>
 #include <SDL.h>
 #include <SDL_image.h>
 
 #define BOARD_SIZE 8
+#define TILE_SIZE 70
+#define WINDOW_SIZE (TILE_SIZE * BOARD_SIZE)
 
-#define RESET   "\x1B[0m"
-#define WHITE   "\x1B[1;37m"
-#define BLACK   "\x1B[1;30m"
-#define B_WHITE "\x1B[48;5;250m"
-#define B_BLACK "\x1B[48;5;237m"
+SDL_Window* window = NULL;
+SDL_Renderer* renderer = NULL;
+SDL_Texture* textures[128];
 
 char board[BOARD_SIZE][BOARD_SIZE] = {
     {'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'},
@@ -24,28 +25,72 @@ char board[BOARD_SIZE][BOARD_SIZE] = {
     {'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'}
 };
 
-int isWhite(char piece) {
-    return piece != ' ' && isupper(piece);
+int selectedRow = -1, selectedCol = -1;
+bool pieceSelected = false;
+int currentTurn = 0;
+bool validMoves[BOARD_SIZE][BOARD_SIZE] = { false };
+
+void getPiecePath(char piece, char* path) {
+    if (piece == ' ') { path[0] = '\0'; return; }
+    const char* color = isupper(piece) ? "white" : "black";
+    char type = tolower(piece);
+    const char* name;
+    switch (type) {
+        case 'p': name = "pawn"; break;
+        case 'r': name = "rook"; break;
+        case 'n': name = "knight"; break;
+        case 'b': name = "bishop"; break;
+        case 'q': name = "queen"; break;
+        case 'k': name = "king"; break;
+        default: name = "unknown";
+    }
+    sprintf(path, "D:/CLion Projects/chess/pieces/%s_%s.png", color, name);
 }
 
-void printBoard() {
+void loadPieceTextures() {
+    char types[] = {'P','R','N','B','Q','K','p','r','n','b','q','k'};
+    for (int i = 0; i < sizeof(types); i++) {
+        char path[128];
+        getPiecePath(types[i], path);
+        SDL_Surface* surface = IMG_Load(path);
+        if (!surface) {
+            printf("Failed to load %s: %s\n", path, IMG_GetError());
+            exit(1);
+        }
+        textures[(int)types[i]] = SDL_CreateTextureFromSurface(renderer, surface);
+        SDL_FreeSurface(surface);
+    }
+}
+
+void renderBoard() {
     for (int row = 0; row < BOARD_SIZE; row++) {
-        printf("%d ", 8 - row);
         for (int col = 0; col < BOARD_SIZE; col++) {
+            SDL_Rect tile = { col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+            SDL_SetRenderDrawColor(renderer, (row + col) % 2 == 0 ? 240 : 181,
+                                                 (row + col) % 2 == 0 ? 217 : 136,
+                                                 (row + col) % 2 == 0 ? 181 : 99, 255);
+            SDL_RenderFillRect(renderer, &tile);
+
+            if (validMoves[row][col]) {
+                SDL_SetRenderDrawColor(renderer, 102, 240, 102, 100);
+                SDL_RenderFillRect(renderer, &tile);
+            }
+
+            if (pieceSelected && row == selectedRow && col == selectedCol) {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+                SDL_RenderDrawRect(renderer, &tile);
+            }
+
             char piece = board[row][col];
-            if (piece == ' ') {
-                printf("%s    %s", (row + col) % 2 == 0 ? B_WHITE : B_BLACK, RESET);
-            } else {
-                printf("%s %s %c %s",
-                       (row + col) % 2 == 0 ? B_WHITE : B_BLACK,
-                       isWhite(piece) ? WHITE : BLACK,
-                       piece,
-                       RESET);
+            if (piece != ' ' && textures[(int)piece]) {
+                SDL_RenderCopy(renderer, textures[(int)piece], NULL, &tile);
             }
         }
-        printf("\n");
     }
-    printf("   a   b   c   d   e   f   g   h\n");
+}
+
+int isWhite(char piece) {
+    return piece != ' ' && isupper(piece);
 }
 
 int isPathClear(int row1, int col1, int row2, int col2) {
@@ -147,6 +192,17 @@ int isValidMove(int row1, int col1, int row2, int col2, int currentTurn) {
             return 0;
     }
     return 0;
+}
+
+void computeValidMoves(int row, int col) {
+    memset(validMoves, 0, sizeof(validMoves));
+    for (int r = 0; r < BOARD_SIZE; r++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            if (isValidMove(row, col, r, c, currentTurn)) {
+                validMoves[r][c] = true;
+            }
+        }
+    }
 }
 
 void findKingPosition(int color, int *kr, int *kc) {
@@ -340,30 +396,56 @@ void loadGame(const char *filename, int *currentTurn) {
 }
 
 int main(int argc, char *argv[]) {
-    char userInput[10];
-    int currentTurn = 0;
-
-    while (1) {
-        printBoard();
-        printf("%s to move (e.g., e2e4), 'save', 'load', or 'q' to quit: ",
-               currentTurn % 2 == 0 ? "White" : "Black");
-        scanf("%s", userInput);
-
-        if (strcmp(userInput, "q") == 0) {
-            break;
-        }
-        if (strcmp(userInput, "save") == 0) {
-            saveGame("chess_save.txt", currentTurn);
-        } else if (strcmp(userInput, "load") == 0) {
-            loadGame("chess_save.txt", &currentTurn);
-        } else if (strlen(userInput) == 4 &&
-                   isalpha(userInput[0]) && isdigit(userInput[1]) &&
-                   isalpha(userInput[2]) && isdigit(userInput[3])) {
-            movePiece(userInput, &currentTurn);
-        } else {
-            printf("Invalid command. Use 'e2e4', 'save', 'load', or 'q'.\n");
-        }
+    if (SDL_Init(SDL_INIT_VIDEO) != 0 || !(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+        printf("SDL init error: %s\n", SDL_GetError());
+        return 1;
     }
+
+    window = SDL_CreateWindow("Chess", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              WINDOW_SIZE, WINDOW_SIZE, SDL_WINDOW_SHOWN);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    loadPieceTextures();
+
+    SDL_Event e;
+    bool running = true;
+
+    while (running) {
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) running = false;
+
+            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                int col = e.button.x / TILE_SIZE;
+                int row = e.button.y / TILE_SIZE;
+
+                if (!pieceSelected && board[row][col] != ' ' &&
+                    ((currentTurn % 2 == 0 && isWhite(board[row][col])) ||
+                     (currentTurn % 2 == 1 && !isWhite(board[row][col])))) {
+                    selectedRow = row;
+                    selectedCol = col;
+                    pieceSelected = true;
+                    computeValidMoves(row, col);
+                     } else if (pieceSelected) {
+                         if (validMoves[row][col]) {
+                             board[row][col] = board[selectedRow][selectedCol];
+                             board[selectedRow][selectedCol] = ' ';
+                             currentTurn++;
+                         }
+                         pieceSelected = false;
+                         memset(validMoves, 0, sizeof(validMoves));
+                     }
+            }
+        }
+
+        SDL_RenderClear(renderer);
+        renderBoard();
+        SDL_RenderPresent(renderer);
+    }
+
+    for (int i = 0; i < 128; i++) if (textures[i]) SDL_DestroyTexture(textures[i]);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    SDL_Quit();
 
     return 0;
 }
