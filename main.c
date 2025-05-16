@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <SDL.h>
+#include <SDL_image.h>
 
 #define BOARD_SIZE 8
 
@@ -338,7 +339,7 @@ void loadGame(const char *filename, int *currentTurn) {
     printf("Game loaded from %s.\n", filename);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     char userInput[10];
     int currentTurn = 0;
 
