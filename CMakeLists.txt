@@ -12,6 +12,10 @@ set(SDL2_IMAGE_PATH "D:/SDL2_image-2.8.4/x86_64-w64-mingw32")
 find_package(SDL2_image REQUIRED)
 include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
 
+set(SDL2_TTF_PATH "D:/SDL2_ttf-2.24.0/x86_64-w64-mingw32")
+find_package(SDL2_ttf REQUIRED)
+include_directories(${SDL2_TTF_INCLUDE_DIR})
+
 add_executable(chess main.c)
 
-target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARIES} ${SDL2_TTF_LIBRARY})
