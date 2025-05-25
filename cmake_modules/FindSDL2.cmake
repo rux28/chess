@@ -35,7 +35,7 @@
 # Added code to assist with automated building by using environmental variables
 # and providing a more controlled/consistent search behavior.
 # Added new modifications to recognize OS X frameworks and
-# additional Unix paths (FreeBSD, etc).
+# additional Unix paths.txt (FreeBSD, etc).
 # Also corrected the header search path to follow "proper" SDL guidelines.
 # Added a search for SDL2main which is needed by some platforms.
 # Added a search for threads which is needed by some platforms.
@@ -44,7 +44,7 @@
 # On OSX, this will prefer the Framework version (if found) over others.
 # People will have to manually change the cache values of
 # SDL2_LIBRARY to override this selection or set the CMake environment
-# CMAKE_INCLUDE_PATH to modify the search paths.
+# CMAKE_INCLUDE_PATH to modify the search paths.txt.
 #
 # Note that the header path has changed from SDL2/SDL.h to just SDL.h
 # This needed to change because "proper" SDL convention

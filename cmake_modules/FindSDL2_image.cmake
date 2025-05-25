@@ -27,7 +27,7 @@
 #
 # Created by Eric Wing.  This was influenced by the FindSDL.cmake
 # module, but with modifications to recognize OS X frameworks and
-# additional Unix paths (FreeBSD, etc).
+# additional Unix paths.txt (FreeBSD, etc).
 
 #=============================================================================
 # Copyright 2005-2009 Kitware, Inc.

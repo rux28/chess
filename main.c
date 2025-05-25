@@ -44,7 +44,27 @@ void getPiecePath(char piece, char* path) {
         case 'k': name = "king"; break;
         default: name = "unknown";
     }
-    sprintf(path, "D:/CLion Projects/chess/pieces/%s_%s.png", color, name);
+
+    FILE *file = fopen("paths.txt", "r");
+    if (file == NULL) {
+        printf("Error opening file\n");
+        exit(1);
+    }
+
+    char myPath[256];
+    if (fgets(myPath, sizeof(myPath), file) == NULL) {
+        printf("Error reading line from file\n");
+        fclose(file);
+        exit(1);
+    }
+    size_t len = strlen(myPath);
+    if (len > 0 && myPath[len - 1] == '\n') {
+        myPath[len - 1] = '\0';
+    }
+
+    fclose(file);
+
+    sprintf(path, "%s/%s_%s.png", myPath, color, name);
 }
 
 void loadPieceTextures() {

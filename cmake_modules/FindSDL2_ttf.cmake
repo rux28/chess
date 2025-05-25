@@ -107,7 +107,7 @@ Created by Amine Ben Hassouna:
 Original FindSDL_ttf.cmake module:
   Created by Eric Wing.  This was influenced by the FindSDL.cmake
   module, but with modifications to recognize OS X frameworks and
-  additional Unix paths (FreeBSD, etc).
+  additional Unix paths.txt (FreeBSD, etc).
 #]=======================================================================]
 
 # SDL2 Library required
