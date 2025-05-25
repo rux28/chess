@@ -1,1 +1,2 @@
 D:/CLion Projects/chess/pieces
+D:/CLion Projects/chess/fonts/OpenSans-Regular.ttf
