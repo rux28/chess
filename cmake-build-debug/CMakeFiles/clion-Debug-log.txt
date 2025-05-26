@@ -1,4 +1,4 @@
-"D:\CLion 2024.2.2\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=D:/CLion 2024.2.2/bin/ninja/win/x64/ninja.exe" -G Ninja -S "D:\CLion Projects\chess" -B "D:\CLion Projects\chess\cmake-build-debug"
--- Configuring done (0.8s)
--- Generating done (0.0s)
--- Build files have been written to: D:/CLion Projects/chess/cmake-build-debug
+"C:\Users\Casiana\CLion 2024.3.4\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Debug -G "MinGW Makefiles" -S C:\Users\Casiana\Desktop\doi\chess -B C:\Users\Casiana\Desktop\doi\chess\cmake-build-debug
+-- Configuring done (1.2s)
+-- Generating done (0.8s)
+-- Build files have been written to: C:/Users/Casiana/Desktop/doi/chess/cmake-build-debug

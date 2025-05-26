@@ -1,3 +1,3 @@
-D:/CLion Projects/chess/cmake-build-debug/CMakeFiles/chess.dir
-D:/CLion Projects/chess/cmake-build-debug/CMakeFiles/edit_cache.dir
-D:/CLion Projects/chess/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+C:/Users/Casiana/Desktop/doi/chess/cmake-build-debug/CMakeFiles/chess.dir
+C:/Users/Casiana/Desktop/doi/chess/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/Casiana/Desktop/doi/chess/cmake-build-debug/CMakeFiles/rebuild_cache.dir

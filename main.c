@@ -151,7 +151,6 @@ void getPiecePath(char piece, char *path) {
             break;
         default: name = "unknown";
     }
-
     sprintf(path, "%s/%s_%s.png", imageBasePath, color, name);
 }
 
