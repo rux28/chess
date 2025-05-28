@@ -585,23 +585,23 @@ int main(int argc, char *argv[]) {
                         selectedCol = col;
                         pieceSelected = true;
                         computeValidMoves(row, col);
-                    } else if (pieceSelected) {
-                        if (validMoves[row][col]) {
-                            char captured = board[row][col];
-                            if (captured != ' ') {
-                                if (isWhite(captured))
-                                    whiteCaptured[whiteCapCount++] = captured;
-                                else
-                                    blackCaptured[blackCapCount++] = captured;
-                            }
+                         } else if (pieceSelected) {
+                             if (validMoves[row][col]) {
+                                 char captured = board[row][col];
+                                 if (captured != ' ') {
+                                     if (isWhite(captured))
+                                         whiteCaptured[whiteCapCount++] = captured;
+                                     else
+                                         blackCaptured[blackCapCount++] = captured;
+                                 }
 
-                            board[row][col] = board[selectedRow][selectedCol];
-                            board[selectedRow][selectedCol] = ' ';
-                            currentTurn++;
-                        }
-                        pieceSelected = false;
-                        memset(validMoves, 0, sizeof(validMoves));
-                    }
+                                 board[row][col] = board[selectedRow][selectedCol];
+                                 board[selectedRow][selectedCol] = ' ';
+                                 currentTurn++;
+                             }
+                             pieceSelected = false;
+                             memset(validMoves, 0, sizeof(validMoves));
+                         }
                 }
             }
         }
@@ -625,6 +625,153 @@ int main(int argc, char *argv[]) {
     SDL_DestroyWindow(window);
     IMG_Quit();
     SDL_Quit();
-
-    return 0;
 }
+    //  Structuri și declarări helper
+
+typedef struct {
+    int from_r, from_c;
+    int to_r,   to_c;
+} Move;
+
+#define MAX_MOVES 256
+
+// vector de mutări
+static Move moveList[MAX_MOVES];
+static int   moveCount;
+
+// Generare mutări legale-n am pus sah
+void generateMoves(int color){
+    moveCount = 0;
+    for (int r = 0; r < BOARD_SIZE; r++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            char p = board[r][c];
+            if (p==' ' || (isWhite(p)?0:1) != color) continue;
+            for (int r2=0; r2<BOARD_SIZE; r2++){
+                for(int c2=0;c2<BOARD_SIZE;c2++){
+                    if (isValidMove(r,c,r2,c2, color) ) {
+                        moveList[moveCount++] = (Move){r,c,r2,c2};
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Piece‐Square Tables (exemplu pentru pioni)
+static const int PST_PAWN[8][8] = {
+    {  0,   0,   0,   0,   0,   0,   0,   0},
+    { 50,  50,  50,  50,  50,  50,  50,  50},
+    { 10,  10,  20,  30,  30,  20,  10,  10},
+    {  5,   5,  10,  25,  25,  10,   5,   5},
+    {  0,   0,   0,  20,  20,   0,   0,   0},
+    {  5,  -5, -10,   0,   0, -10,  -5,   5},
+    {  5,  10,  10, -20, -20,  10,  10,   5},
+    {  0,   0,   0,   0,   0,   0,   0,   0}
+};
+
+//Evaluare statică
+int evaluateStatic() {
+    static const int VALS[128] = { ['P']=100, ['N']=320, ['B']=330, ['R']=500, ['Q']=900, ['K']=20000,
+                                   ['p']=-100,['n']=-320,['b']=-330,['r']=-500,['q']=-900,['k']=-20000 };
+    int score = 0;
+    for(int r=0;r<8;r++)for(int c=0;c<8;c++){
+        char p = board[r][c];
+        if (!p) continue;
+        score += VALS[(int)p];
+        // ex:PST pentru pioni
+        if (tolower(p)=='p') {
+            score += isupper(p)
+                   ? PST_PAWN[r][c]
+                   : -PST_PAWN[7-r][c];
+        }
+    }
+    return score;
+}
+
+// Evaluare dinamică (mobilitate + control centru)
+int evaluateDynamic(int color) {
+    int mob = 0, center = 0;
+    // mobilitate: nr mutări legale
+    generateMoves(color);
+    mob = moveCount;
+    // control centru: bonus pentru ocuparea/dotarea celor 4 patrate (d4,e4,d5,e5)
+    const int centers[4][2] = {{3,3},{3,4},{4,3},{4,4}};
+    for(int i=0;i<4;i++){
+        char p = board[ centers[i][0] ][ centers[i][1] ];
+        if (p!=' ' && (isWhite(p)?0:1)==color) center++;
+    }
+    return mob * 10 + center * 25;
+}
+
+//  Minimax + Alpha–Beta Pruning
+int alphabeta(int depth, int alpha, int beta, int color) {
+    int opponent = 1 - color;
+
+    if (depth == 0) {
+        int stat = evaluateStatic();
+        int dyn  = evaluateDynamic(color) - evaluateDynamic(opponent);
+
+        return stat + dyn;
+    }
+    generateMoves(color);
+    if (moveCount == 0) {
+        // mat sau remiză
+        if (isKingInCheck(color)) return -100000 + (8-depth);
+        else                       return    0;
+    }
+    for(int i=0;i<moveCount;i++){
+        Move m = moveList[i];
+        char captured = board[m.to_r][m.to_c];
+        // aplica mutarea
+        board[m.to_r][m.to_c] = board[m.from_r][m.from_c];
+        board[m.from_r][m.from_c] = ' ';
+        int val = -alphabeta(depth-1, -beta, -alpha, opponent);
+        // undo
+        board[m.from_r][m.from_c] = board[m.to_r][m.to_c];
+        board[m.to_r][m.to_c]     = captured;
+        if (val >= beta) return beta;       // prune
+        if (val > alpha) alpha = val;
+    }
+    return alpha;
+}
+
+// găsim cea mai bună mutare
+Move findBestMove(int depth, int color, int *outScore) {
+    Move best = {0,0,0,0};
+    int alpha = -1000000;
+    generateMoves(color);
+    for(int i=0;i<moveCount;i++){
+        Move m = moveList[i];
+        char cap = board[m.to_r][m.to_c];
+        board[m.to_r][m.to_c] = board[m.from_r][m.from_c];
+        board[m.from_r][m.from_c] = ' ';
+        int score = -alphabeta(depth-1, -1000000, 1000000, 1-color);
+        // undo
+        board[m.from_r][m.from_c] = board[m.to_r][m.to_c];
+        board[m.to_r][m.to_c]     = cap;
+        if (score > alpha) {
+            alpha = score;
+            best  = m;
+        }
+    }
+    *outScore = alpha;
+    return best;
+}
+
+// Funcție de apel din main loop
+void engineMove(int depth) {
+    int score;
+    Move m = findBestMove(depth, /* culoare engine = */ currentTurn%2, &score);
+    // aplică mutarea în board-ul curent
+    char logm[6] = {
+        'a'+m.from_c, '8'-m.from_r,
+        'a'+m.to_c,   '8'-m.to_r,
+        '\0'
+    };
+    printf("Engine plays %s  (eval=%d centipawns)\n", logm, score);
+    movePiece(logm, &currentTurn);  // folosește funcția ta deja existentă
+}
+
+
+
+
