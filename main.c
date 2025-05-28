@@ -7,6 +7,10 @@
 #include <SDL_image.h>
 #include <SDL_ttf.h>
 
+
+
+void engineMove(int depth);
+
 #define BOARD_SIZE 8
 #define TILE_SIZE 70
 #define BOARD_WIDTH (TILE_SIZE * BOARD_SIZE)
@@ -598,6 +602,12 @@ int main(int argc, char *argv[]) {
                                  board[row][col] = board[selectedRow][selectedCol];
                                  board[selectedRow][selectedCol] = ' ';
                                  currentTurn++;
+                                 if (currentState == CHESS_BOARD && currentTurn % 2 == 1)
+                                     //0 e white s turn, 1 black s
+                                     {
+                                     engineMove(4);
+                                 }
+
                              }
                              pieceSelected = false;
                              memset(validMoves, 0, sizeof(validMoves));
