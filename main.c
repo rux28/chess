@@ -54,6 +54,21 @@ int botPlaysColor = 1; // 0 = white, 1 = black
 char imageBasePath[256];
 char fontPath[256];
 
+int enPassantRow = -1; // row of pawn that just did a 2-step
+int enPassantCol = -1;
+
+bool whiteKingMoved = false;
+bool whiteKingsideRookMoved = false;
+bool whiteQueensideRookMoved = false;
+bool blackKingMoved = false;
+bool blackKingsideRookMoved = false;
+bool blackQueensideRookMoved = false;
+
+bool awaitingPromotion = false;
+int promoRow = -1, promoCol = -1;
+char promoColor = ' '; // 'w' or 'b'
+bool promotionJustCompleted = false;
+
 typedef struct {
     int from_r, from_c;
     int to_r, to_c;
@@ -87,6 +102,18 @@ void resetGameState() {
     playWithBot = false;
     botPlaysColor = 1;
     moveCount = 0;
+    enPassantRow = -1;
+    enPassantCol = -1;
+    whiteKingMoved = false;
+    whiteKingsideRookMoved = false;
+    whiteQueensideRookMoved = false;
+    blackKingMoved = false;
+    blackKingsideRookMoved = false;
+    blackQueensideRookMoved = false;
+    awaitingPromotion = false;
+    promoRow = -1, promoCol = -1;
+    promoColor = ' ';
+    promotionJustCompleted = false;
 }
 
 
@@ -270,6 +297,44 @@ int isPathClear(int r1, int c1, int r2, int c2) {
     return 1;
 }
 
+void findKingPosition(int color, int *kr, int *kc) {
+    char searchChar = (color == 0) ? 'K' : 'k';
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if (board[r][c] == searchChar) {
+                *kr = r;
+                *kc = c;
+                return;
+            }
+    *kr = *kc = -1;
+}
+
+int isValidMove(int r1, int c1, int r2, int c2, int turn);
+
+int canCaptureSquare(int r1, int c1, int r2, int c2) {
+    char p = board[r1][c1];
+    if (p == ' ') return 0;
+    if (board[r2][c2] != ' ' && isWhitePiece(board[r2][c2]) == isWhitePiece(p))
+        return 0;
+    int pseudoTurn = isWhitePiece(p) ? 0 : 1;
+    return isValidMove(r1, c1, r2, c2, pseudoTurn);
+}
+
+int isKingInCheck(int color) {
+    int kr, kc;
+    findKingPosition(color, &kr, &kc);
+    if (kr < 0) return 0;
+    for (int r = 0; r < 8; r++) {
+        for (int c = 0; c < 8; c++) {
+            char p = board[r][c];
+            if (p == ' ') continue;
+            if (isWhitePiece(p) == (color == 0)) continue;
+            if (canCaptureSquare(r, c, kr, kc)) return 1;
+        }
+    }
+    return 0;
+}
+
 int isValidMove(int r1, int c1, int r2, int c2, int turn) {
     // Bounds check
     if (r1 < 0 || r1 >= 8 || c1 < 0 || c1 >= 8 || r2 < 0 || r2 >= 8 || c2 < 0 || c2 >= 8) return 0;
@@ -294,11 +359,20 @@ int isValidMove(int r1, int c1, int r2, int c2, int turn) {
                 if (r1 == 6 && dr == -2 && dc == 0 && board[r1 - 1][c1] == ' ' && targ == ' ') return 1;
                 // capture diagonally
                 if (dr == -1 && abs(dc) == 1 && targ != ' ' && !isWhitePiece(targ)) return 1;
+                // En passant for White
+                if (r1 == 3 && dr == -1 && abs(dc) == 1 && board[r2][c2] == ' ' &&
+                    r2 == enPassantRow && c2 == enPassantCol) {
+                    return 1;
+                }
             } else {
                 // black pawn goes “down”
                 if (dr == 1 && dc == 0 && targ == ' ') return 1;
                 if (r1 == 1 && dr == 2 && dc == 0 && board[r1 + 1][c1] == ' ' && targ == ' ') return 1;
                 if (dr == 1 && abs(dc) == 1 && targ != ' ' && isWhitePiece(targ)) return 1;
+                if (r1 == 4 && dr == 1 && abs(dc) == 1 && board[r2][c2] == ' ' &&
+                    r2 == enPassantRow && c2 == enPassantCol) {
+                    return 1;
+                }
             }
             break;
         }
@@ -315,7 +389,36 @@ int isValidMove(int r1, int c1, int r2, int c2, int turn) {
             if ((abs(dr) == abs(dc)) || dr == 0 || dc == 0) return isPathClear(r1, c1, r2, c2);
             break;
         case 'k':
-            if (abs(dr) <= 1 && abs(dc) <= 1) return 1;
+            if (abs(dr) <= 1 && abs(dc) <= 1) return 1; // normal king move
+
+        // Castling for White
+            if (isWhitePiece(piece) && r1 == 7 && c1 == 4) {
+                if (!whiteKingMoved) {
+                    if (r2 == 7 && c2 == 6 && !whiteKingsideRookMoved &&
+                        board[7][5] == ' ' && board[7][6] == ' ') {
+                        return 1; // kingside
+                    }
+                    if (r2 == 7 && c2 == 2 && !whiteQueensideRookMoved &&
+                        board[7][1] == ' ' && board[7][2] == ' ' && board[7][3] == ' ') {
+                        return 1; // queenside
+                    }
+                }
+            }
+
+        // Castling for Black
+            if (!isWhitePiece(piece) && r1 == 0 && c1 == 4) {
+                if (!blackKingMoved) {
+                    if (r2 == 0 && c2 == 6 && !blackKingsideRookMoved &&
+                        board[0][5] == ' ' && board[0][6] == ' ') {
+                        return 1;
+                    }
+                    if (r2 == 0 && c2 == 2 && !blackQueensideRookMoved &&
+                        board[0][1] == ' ' && board[0][2] == ' ' && board[0][3] == ' ') {
+                        return 1;
+                    }
+                }
+            }
+
             break;
     }
     return 0;
@@ -332,42 +435,6 @@ void computeValidMoves(int r, int c) {
             }
         }
     }
-}
-
-void findKingPosition(int color, int *kr, int *kc) {
-    char searchChar = (color == 0) ? 'K' : 'k';
-    for (int r = 0; r < 8; r++)
-        for (int c = 0; c < 8; c++)
-            if (board[r][c] == searchChar) {
-                *kr = r;
-                *kc = c;
-                return;
-            }
-    *kr = *kc = -1;
-}
-
-int canCaptureSquare(int r1, int c1, int r2, int c2) {
-    char p = board[r1][c1];
-    if (p == ' ') return 0;
-    if (board[r2][c2] != ' ' && isWhitePiece(board[r2][c2]) == isWhitePiece(p))
-        return 0;
-    int pseudoTurn = isWhitePiece(p) ? 0 : 1;
-    return isValidMove(r1, c1, r2, c2, pseudoTurn);
-}
-
-int isKingInCheck(int color) {
-    int kr, kc;
-    findKingPosition(color, &kr, &kc);
-    if (kr < 0) return 0;
-    for (int r = 0; r < 8; r++) {
-        for (int c = 0; c < 8; c++) {
-            char p = board[r][c];
-            if (p == ' ') continue;
-            if (isWhitePiece(p) == (color == 0)) continue;
-            if (canCaptureSquare(r, c, kr, kc)) return 1;
-        }
-    }
-    return 0;
 }
 
 int hasAnyLegalMove(int color) {
@@ -450,11 +517,69 @@ void movePieceStoringLog(const char *mv) {
         return;
     }
     char captured = board[r2][c2];
+    // Check if en passant should occur
+    if (tolower(board[r1][c1]) == 'p' && board[r2][c2] == ' ' && c1 != c2) {
+        // Diagonal move to empty square by pawn = en passant
+        if (isWhitePiece(board[r1][c1])) {
+            captured = board[r2 + 1][c2];
+            board[r2 + 1][c2] = ' ';
+        } else {
+            captured = board[r2 - 1][c2];
+            board[r2 - 1][c2] = ' ';
+        }
+    } else {
+        captured = board[r2][c2];
+    }
+
     char mover = board[r1][c1];
 
     // Make the move
     board[r2][c2] = mover;
+    // Reset en passant target
+    enPassantRow = -1;
+    enPassantCol = -1;
+
+    // If a pawn just moved two steps, set en passant square
+    if (tolower(mover) == 'p' && abs(r2 - r1) == 2) {
+        enPassantRow = (r1 + r2) / 2;
+        enPassantCol = c1;
+    }
+
     board[r1][c1] = ' ';
+
+    // Check for pawn promotion
+    if ((mover == 'P' && r2 == 0) || (mover == 'p' && r2 == 7)) {
+        awaitingPromotion = true;
+        promoRow = r2;
+        promoCol = c2;
+        promoColor = isWhitePiece(mover) ? 'w' : 'b';
+        return; // pause game to await promotion input
+    }
+
+
+    // Handle castling
+    if (tolower(mover) == 'k' && abs(c2 - c1) == 2) {
+        if (mover == 'K') {
+            if (c2 == 6) {
+                // kingside
+                board[7][5] = board[7][7];
+                board[7][7] = ' ';
+            } else if (c2 == 2) {
+                // queenside
+                board[7][3] = board[7][0];
+                board[7][0] = ' ';
+            }
+        } else if (mover == 'k') {
+            if (c2 == 6) {
+                board[0][5] = board[0][7];
+                board[0][7] = ' ';
+            } else if (c2 == 2) {
+                board[0][3] = board[0][0];
+                board[0][0] = ' ';
+            }
+        }
+    }
+
 
     int moverColor = isWhitePiece(mover) ? 0 : 1;
     if (isKingInCheck(moverColor)) {
@@ -475,6 +600,18 @@ void movePieceStoringLog(const char *mv) {
     }
     logMove(mv);
     currentTurn++;
+
+    if (mover == 'K') whiteKingMoved = true;
+    if (mover == 'R') {
+        if (r1 == 7 && c1 == 0) whiteQueensideRookMoved = true;
+        if (r1 == 7 && c1 == 7) whiteKingsideRookMoved = true;
+    }
+    if (mover == 'k') blackKingMoved = true;
+    if (mover == 'r') {
+        if (r1 == 0 && c1 == 0) blackQueensideRookMoved = true;
+        if (r1 == 0 && c1 == 7) blackKingsideRookMoved = true;
+    }
+
 
     int nextColor = currentTurn % 2;
     int inCheck = isKingInCheck(nextColor);
@@ -822,6 +959,24 @@ int main(int argc, char *argv[]) {
                 int mx = e.button.x;
                 int my = e.button.y;
 
+                if (awaitingPromotion) {
+                    const char *options = "qrbn";
+                    for (int i = 0; i < 4; i++) {
+                        SDL_Rect optRect = {BOARD_WIDTH + 40 + i * 60, 200, 50, 50};
+                        if (mx >= optRect.x && mx <= optRect.x + optRect.w &&
+                            my >= optRect.y && my <= optRect.y + optRect.h) {
+                            char chosen = promoColor == 'w' ? toupper(options[i]) : tolower(options[i]);
+                            board[promoRow][promoCol] = chosen;
+                            awaitingPromotion = false;
+                            promotionJustCompleted = true;
+                            currentTurn++;
+                            break;
+                        }
+                    }
+                    continue; // skip further input while waiting for promotion
+                }
+
+
                 if (currentState == MAIN_MENU) {
                     if (SDL_PointInRect(&(SDL_Point){mx, my}, &playButton)) {
                         playWithBot = false;
@@ -872,7 +1027,7 @@ int main(int argc, char *argv[]) {
                                 SDL_SetRenderDrawColor(renderer, 255, 192, 203, 255);
                                 SDL_RenderClear(renderer);
                                 renderBoardWithBack();
-                                SDL_RenderPresent(renderer);
+
                                 SDL_Delay(200);
 
                                 if (playWithBot && currentTurn % 2 == botPlaysColor) {
@@ -897,6 +1052,28 @@ int main(int argc, char *argv[]) {
         if (currentState == MAIN_MENU) {
             renderMainMenu();
         } else {
+            if (currentState == CHESS_BOARD) {
+                renderBoardWithBack();
+
+                // Always render promotion options if needed
+                if (awaitingPromotion) {
+                    const char *options = "qrbn";
+                    for (int i = 0; i < 4; i++) {
+                        char piece = promoColor == 'w' ? toupper(options[i]) : tolower(options[i]);
+                        SDL_Rect optRect = {BOARD_WIDTH + 40 + i * 60, 200, 50, 50};
+                        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                        SDL_RenderFillRect(renderer, &optRect);
+                        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                        SDL_RenderDrawRect(renderer, &optRect);
+                        if (textures[(int) piece]) {
+                            SDL_RenderCopy(renderer, textures[(int) piece], NULL, &optRect);
+                        }
+                    }
+                }
+
+                SDL_RenderPresent(renderer);
+            }
+
             if (!firstBoardDrawn) {
                 renderBoardWithBack();
                 SDL_RenderPresent(renderer);
