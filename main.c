@@ -23,9 +23,11 @@ typedef enum { MAIN_MENU, CHESS_BOARD } GameState;
 
 GameState currentState = MAIN_MENU;
 
-SDL_Rect playButton = {WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 50, 200, 100};
-SDL_Rect botButton = {WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 70, 200, 100};
+SDL_Rect playButton = {WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 200, 200, 100};
+SDL_Rect botButton = {WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 - 50, 200, 100};
 SDL_Rect backButton = {WINDOW_WIDTH - 90, 10, 80, 30};
+SDL_Rect savePGNButton = {WINDOW_WIDTH - 180, 10, 80, 30};
+SDL_Rect pgnButton = {WINDOW_WIDTH / 2 - 100, WINDOW_HEIGHT / 2 + 100, 200, 100};
 
 char board[BOARD_SIZE][BOARD_SIZE] = {
     {'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'},
@@ -43,9 +45,9 @@ bool pieceSelected = false;
 int currentTurn = 0; // 0 = White to move, 1 = Black to move
 bool validMoves[BOARD_SIZE][BOARD_SIZE] = {false};
 
-// Captured‐piece stacks (for display)
-char whiteCaptured[32] = {0}; // pieces captured from White (i.e. Black took them)
-char blackCaptured[32] = {0}; // pieces captured from Black (i.e. White took them)
+
+char whiteCaptured[32] = {0}; // pieces captured from white
+char blackCaptured[32] = {0}; // pieces captured from black
 int whiteCapCount = 0;
 int blackCapCount = 0;
 
@@ -54,7 +56,7 @@ int botPlaysColor = 1; // 0 = white, 1 = black
 char imageBasePath[256];
 char fontPath[256];
 
-int enPassantRow = -1; // row of pawn that just did a 2-step
+int enPassantRow = -1;
 int enPassantCol = -1;
 
 bool whiteKingMoved = false;
@@ -68,6 +70,10 @@ bool awaitingPromotion = false;
 int promoRow = -1, promoCol = -1;
 char promoColor = ' '; // 'w' or 'b'
 bool promotionJustCompleted = false;
+
+#define MAX_PGN_LEN 8192
+char pgnMoves[MAX_PGN_LEN] = {0};
+int fullMoveNumber = 1;
 
 typedef struct {
     int from_r, from_c;
@@ -155,10 +161,11 @@ void drawButton(SDL_Rect rect, const char *text) {
 }
 
 void renderMainMenu() {
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+    SDL_SetRenderDrawColor(renderer, 255, 192, 203, 255); // Light pink
     SDL_RenderClear(renderer);
     drawButton(playButton, "Play Human");
     drawButton(botButton, "Play with Bot");
+    drawButton(pgnButton, "Play again");
     SDL_RenderPresent(renderer);
 }
 
@@ -462,13 +469,156 @@ int hasAnyLegalMove(int color) {
     return 0;
 }
 
-void logMove(const char *mv) {
-    FILE *f = fopen("moves.txt", "a");
-    if (f) {
-        fprintf(f, "%s\n", mv);
-        fclose(f);
+void logMoveToPGN(const char *mv, char pieceMoved, bool isCapture, bool isCheck, bool isCheckmate) {
+    char buffer[32] = {0};
+    char pieceChar = (tolower(pieceMoved) == 'p') ? '\0' : toupper(pieceMoved);
+    char moveStr[16];
+
+    if (pieceChar) {
+        sprintf(moveStr, "%c%s", pieceChar, mv + 2); // like Nf3
+    } else {
+        sprintf(moveStr, "%s", mv + 2); // like e4
     }
+
+    if (isCapture) {
+        if (pieceChar == '\0')
+            sprintf(moveStr, "%cxe%c", mv[0], mv[2]); // exd5 for pawn
+        else
+            sprintf(moveStr, "%cxe%c", pieceChar, mv[2]);
+    }
+
+    if (isCheckmate)
+        strcat(moveStr, "#");
+    else if (isCheck)
+        strcat(moveStr, "+");
+
+    if (currentTurn % 2 == 0) {
+        // white to move → new fullmove
+        sprintf(buffer, "%d. %s ", fullMoveNumber++, moveStr);
+    } else {
+        sprintf(buffer, "%s ", moveStr);
+    }
+
+    strcat(pgnMoves, buffer);
 }
+
+void savePGN(const char *filename) {
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        printf("Could not save PGN file\n");
+        return;
+    }
+
+    // Basic PGN tags
+    fprintf(f, "[Event \"Casual Game\"]\n");
+    fprintf(f, "[Site \"Local\"]\n");
+    fprintf(f, "[Date \"2025.06.04\"]\n");
+    fprintf(f, "[Round \"1\"]\n");
+    fprintf(f, "[White \"Player1\"]\n");
+    fprintf(f, "[Black \"Player2\"]\n");
+    fprintf(f, "[Result \"*\"]\n\n");
+
+    // Moves
+    fprintf(f, "%s *\n", pgnMoves); // PGN body ends with result
+    fclose(f);
+    printf("PGN saved to %s\n", filename);
+}
+
+void movePieceStoringLog(const char *mv);
+
+void applySANMove(const char *san) {
+    if (strcmp(san, "O-O") == 0 || strcmp(san, "O-O-O") == 0) {
+        // Assume white kingside: O-O → e1g1, rook h1f1
+        // Assume black kingside: O-O → e8g8, rook h8f8
+        // Assume white queenside: O-O-O → e1c1, rook a1d1
+        // Assume black queenside: O-O-O → e8c8, rook a8d8
+        int isWhite = currentTurn % 2 == 0;
+        if (strcmp(san, "O-O") == 0) {
+            movePieceStoringLog(isWhite ? "e1g1" : "e8g8");
+        } else {
+            movePieceStoringLog(isWhite ? "e1c1" : "e8c8");
+        }
+        return;
+    }
+
+    char piece = 'P';
+    int srcCol = -1, srcRow = -1;
+    int dstCol = -1, dstRow = -1;
+    int isCapture = strchr(san, 'x') != NULL;
+    int len = strlen(san);
+
+    int isWhite = currentTurn % 2 == 0;
+
+    // Determine piece type
+    if (san[0] >= 'A' && san[0] <= 'Z' && san[0] != 'O') {
+        piece = san[0];
+        san++; // move to next part
+    }
+
+    // Extract destination square (last 2 characters)
+    char file = san[len - 2];
+    char rank = san[len - 1];
+    dstCol = file - 'a';
+    dstRow = '8' - rank;
+
+    // Check for disambiguation (e.g., Nbd2, R1e1)
+    for (int i = 0; i < len - 2; i++) {
+        if (san[i] >= 'a' && san[i] <= 'h') srcCol = san[i] - 'a';
+        if (san[i] >= '1' && san[i] <= '8') srcRow = '8' - san[i];
+    }
+
+    // Search for matching piece
+    for (int r = 0; r < BOARD_SIZE; r++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            char p = board[r][c];
+            if (p == ' ') continue;
+
+            // Must match piece and color
+            if ((isWhite && !isWhitePiece(p)) || (!isWhite && isWhitePiece(p))) continue;
+            if (toupper(p) != piece) continue;
+            if (srcCol != -1 && c != srcCol) continue;
+            if (srcRow != -1 && r != srcRow) continue;
+
+            // Try move
+            if (isValidMove(r, c, dstRow, dstCol, currentTurn)) {
+                char coordMove[5];
+                coordMove[0] = 'a' + c;
+                coordMove[1] = '8' - r;
+                coordMove[2] = 'a' + dstCol;
+                coordMove[3] = '8' - dstRow;
+                coordMove[4] = '\0';
+                movePieceStoringLog(coordMove);
+                return;
+            }
+        }
+    }
+
+    printf("SAN parser failed for move: %s\n", san);
+}
+
+
+void playPGNFile(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        printf("Could not open PGN file: %s\n", filename);
+        return;
+    }
+
+    resetGameState();
+
+    char token[64];
+    while (fscanf(f, "%s", token) == 1) {
+        if (token[0] == '[' || isdigit(token[0])) continue; // skip headers and move numbers
+        if (strcmp(token, "*") == 0 || strcmp(token, "1-0") == 0 || strcmp(token, "0-1") == 0 ||
+            strcmp(token, "1/2-1/2") == 0)
+            break;
+        applySANMove(token);
+    }
+
+    fclose(f);
+    currentState = CHESS_BOARD;
+}
+
 
 const char *getGameStatusText() {
     int color = currentTurn % 2;
@@ -503,6 +653,7 @@ void drawTurnIndicator(int turn) {
 void renderBoardWithBack() {
     renderBoard();
     drawButton(backButton, "Back");
+    drawButton(savePGNButton, "Save");
     drawTurnIndicator(currentTurn);
     drawCapturedPieces();
 }
@@ -598,7 +749,7 @@ void movePieceStoringLog(const char *mv) {
             blackCaptured[blackCapCount++] = captured;
         }
     }
-    logMove(mv);
+    logMoveToPGN(mv, mover, captured != ' ', isKingInCheck(currentTurn % 2), !hasAnyLegalMove(currentTurn % 2));
     currentTurn++;
 
     if (mover == 'K') whiteKingMoved = true;
@@ -858,7 +1009,8 @@ void engineMove(int depth) {
     // Make it
     board[m.to_r][m.to_c] = board[m.from_r][m.from_c];
     board[m.from_r][m.from_c] = ' ';
-    logMove(mv);
+    logMoveToPGN(mv, board[m.to_r][m.to_c], captured != ' ', isKingInCheck(currentTurn % 2),
+                 !hasAnyLegalMove(currentTurn % 2));
     currentTurn++;
 
     // After engine move, force a redraw
@@ -986,12 +1138,19 @@ int main(int argc, char *argv[]) {
                         playWithBot = true;
                         currentState = CHESS_BOARD;
                         firstBoardDrawn = false;
+                    } else if (SDL_PointInRect(&(SDL_Point){mx, my}, &pgnButton)) {
+                        playPGNFile("game.pgn");
+                        firstBoardDrawn = false;
                     }
                 } else if (currentState == CHESS_BOARD) {
                     // “Back” button
                     if (SDL_PointInRect(&(SDL_Point){mx, my}, &backButton)) {
                         resetGameState();
                         currentState = MAIN_MENU;
+                        continue;
+                    }
+                    if (SDL_PointInRect(&(SDL_Point){mx, my}, &savePGNButton)) {
+                        savePGN("game.pgn");
                         continue;
                     }
                     int col = mx / TILE_SIZE;
@@ -1022,6 +1181,7 @@ int main(int argc, char *argv[]) {
                                     '\0'
                                 };
                                 movePieceStoringLog(mv);
+
 
                                 // Redraw after human move
                                 SDL_SetRenderDrawColor(renderer, 255, 192, 203, 255);
