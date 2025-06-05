@@ -586,6 +586,7 @@ int isValidMove(int r1, int c1, int r2, int c2, int turn) {
     int dr = r2 - r1;
     int dc = c2 - c1;
 
+    int dr = r2 - r1, dc = c2 - c1;
     switch (tolower(piece)) {
         case 'p': {
             // Pawn logic
@@ -684,6 +685,7 @@ int isValidMove(int r1, int c1, int r2, int c2, int turn) {
                     return 1;
                 }
             }
+
             break;
     }
 
@@ -784,7 +786,67 @@ void generateMoves(int color) {
             }
         }
     }
+
+    if (isCapture) {
+        if (pieceChar == '\0')
+            sprintf(moveStr, "%cxe%c", mv[0], mv[2]); // exd5 for pawn
+        else
+            sprintf(moveStr, "%cxe%c", pieceChar, mv[2]);
+    }
+
+    if (isCheckmate)
+        strcat(moveStr, "#");
+    else if (isCheck)
+        strcat(moveStr, "+");
+
+    if (currentTurn % 2 == 0) {
+        // white to move → new fullmove
+        sprintf(buffer, "%d. %s ", fullMoveNumber++, moveStr);
+    } else {
+        sprintf(buffer, "%s ", moveStr);
+    }
+
+    strcat(pgnMoves, buffer);
 }
+
+void savePGN(const char *filename) {
+    FILE *f = fopen(filename, "w");
+    if (!f) {
+        printf("Could not save PGN file\n");
+        return;
+    }
+
+    // Basic PGN tags
+    fprintf(f, "[Event \"Casual Game\"]\n");
+    fprintf(f, "[Site \"Local\"]\n");
+    fprintf(f, "[Date \"2025.06.04\"]\n");
+    fprintf(f, "[Round \"1\"]\n");
+    fprintf(f, "[White \"Player1\"]\n");
+    fprintf(f, "[Black \"Player2\"]\n");
+    fprintf(f, "[Result \"*\"]\n\n");
+
+    // Moves
+    fprintf(f, "%s *\n", pgnMoves); // PGN body ends with result
+    fclose(f);
+    printf("PGN saved to %s\n", filename);
+}
+
+void movePieceStoringLog(const char *mv);
+
+void applySANMove(const char *san) {
+    if (strcmp(san, "O-O") == 0 || strcmp(san, "O-O-O") == 0) {
+        // Assume white kingside: O-O → e1g1, rook h1f1
+        // Assume black kingside: O-O → e8g8, rook h8f8
+        // Assume white queenside: O-O-O → e1c1, rook a1d1
+        // Assume black queenside: O-O-O → e8c8, rook a8d8
+        int isWhite = currentTurn % 2 == 0;
+        if (strcmp(san, "O-O") == 0) {
+            movePieceStoringLog(isWhite ? "e1g1" : "e8g8");
+        } else {
+            movePieceStoringLog(isWhite ? "e1c1" : "e8c8");
+        }
+        return;
+    }
 
 void movePieceStoringLog(const char *mv) {
     int c1 = tolower(mv[0]) - 'a';
@@ -796,6 +858,36 @@ void movePieceStoringLog(const char *mv) {
         printf("Invalid move: %s\n", mv);
         return;
     }
+    char captured = board[r2][c2];
+    // Check if en passant should occur
+    if (tolower(board[r1][c1]) == 'p' && board[r2][c2] == ' ' && c1 != c2) {
+        // Diagonal move to empty square by pawn = en passant
+        if (isWhitePiece(board[r1][c1])) {
+            captured = board[r2 + 1][c2];
+            board[r2 + 1][c2] = ' ';
+        } else {
+            captured = board[r2 - 1][c2];
+            board[r2 - 1][c2] = ' ';
+        }
+    } else {
+        captured = board[r2][c2];
+    }
+
+    char mover = board[r1][c1];
+
+    // Make the move
+    board[r2][c2] = mover;
+    // Reset en passant target
+    enPassantRow = -1;
+    enPassantCol = -1;
+
+    // If a pawn just moved two steps, set en passant square
+    if (tolower(mover) == 'p' && abs(r2 - r1) == 2) {
+        enPassantRow = (r1 + r2) / 2;
+        enPassantCol = c1;
+    }
+
+    board[r1][c1] = ' ';
 
     char captured = board[r2][c2];
     char mover    = board[r1][c1];
@@ -902,7 +994,7 @@ void movePieceStoringLog(const char *mv) {
     if (!canMv) {
         if (inChk) {
             printf("Checkmate! %s wins!\n", moverColor == 0 ? "White" : "Black");
-        } else {
+        else
             printf("Stalemate! It's a draw.\n");
         }
         SDL_Delay(500);
